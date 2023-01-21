@@ -13,9 +13,9 @@ class Binance:
         self.api_key = api_key
         self.api_secret=api_secret
         self.base_url=""
-        self.base_websocket="wss://data-stream.binance.com/ws/"
-        self.ticker_dataframe = pd.DataFrame
-        self.kline = pd.DataFrame
+        self.base_websocket="wss://stream.binance.com:9443/ws/"
+        self.ticker_dataframe = pd.DataFrame()
+        self.kline = pd.DataFrame()
 
         def connect():
             '''
@@ -29,10 +29,7 @@ class Binance:
                     break
         
         connect()
-
-    def __generate_klines(open:list, close:list)->list:
-        pass
-        
+      
 
     def generate_df(self, data:list)->pd.DataFrame:
         df = pd.DataFrame(data,
@@ -49,7 +46,7 @@ class Binance:
         print("-"*10)
         self.ticker_dataframe = df
 
-    def get_kline_data(self, ticker:str, interval:str="15m", time_start:str=None, time_end:str=None, limit:int=None)->list:
+    def get_initial_kline_data(self, ticker:str, interval:str="15m", time_start:str=None, time_end:str=None, limit:int=None)->list:
         '''
         Generate the kline for ONE symbol(ticker) between a start_time and start_end, with a time interval for each kline.
             ticker: trading symbol for example 
@@ -81,25 +78,30 @@ class Binance:
 
     def __short_position(self, ticker:str, amount:int):
         pass
-    
-    def check_poistion(self, ticker:str=None):
-        '''
-        Check your position in the ticker. If no ticker is passed will return ur global position
-            ticker: coin symbol.
-        '''
-        pass
+
+    def __generate_klines(self):
+        date_time = self.kline['date'].iloc[-1]
+        open_price=self.kline['open price'].iloc[0]
+        close_price=self.kline['close price'].iloc[self.kline.shape[0]]
+        high_price=self.kline['high price'].max()
+        low_price=self.kline['low price'].min()
+        new_list=[date_time, open_price, high_price, low_price, close_price]
+        print(new_list)
+        self.kline = self.kline.iloc[0:0]
+        self.ticker_dataframe.loc[self.ticker_dataframe.shape[0]] = new_list  
+
 
     def connect_webhook(self, ticker:str, interval:str="3m"):
         socket = self.base_websocket+ticker+"@kline_"+interval
-
         print("STARTING WEBSOCKET -->", socket)
 
         def on_message(wsapp, message):  
             json_message = json.loads(message)
             handle_trades(json_message)
 
-        def on_error(wsapp, error):
-            print(error)
+        def on_error(wsapp:websocket.WebSocketApp, error):
+            print("ERROR: ",error)
+            wsapp.close()
 
         def handle_trades(json_message):
             date_time = datetime.datetime.fromtimestamp(json_message['E']/1000).strftime('%Y-%m-%d %H:%M:%S')
@@ -107,13 +109,11 @@ class Binance:
             close_price = float(json_message['k']['c'])
             high_price = float(json_message['k']['h'])
             low_price = float(json_message['k']['l'])
-            print(high_price, str(json_message['k']['x']))
+            new_list=[date_time, open_price, high_price, low_price, close_price]
+            print(date_time, str(json_message['k']['x']))
             if json_message['k']['x'] == True:
-                new_list=[date_time, open_price, high_price, low_price, close_price]
-                self.ticker_dataframe.loc[self.ticker_dataframe.shape[0]] = new_list
-                print(self.ticker_dataframe.iloc[-2:]['high price'].max())
-                self.ticker_dataframe = self.ticker_dataframe.iloc[1:]
-                #Cierre de la kline
+                #Calculate kline and close kline
+                print(True)
 
         wsapp = websocket.WebSocketApp(socket, on_message=on_message, on_error=on_error)
         wsapp.run_forever()
@@ -121,7 +121,8 @@ class Binance:
 
 if __name__=="__main__":
     client = Binance("test", "test")
-    client.get_kline_data("SOLBUSD", "1m")
+    ticker = "ADABNB"
+    client.get_initial_kline_data("SOLBUSD", "1m")
     client.connect_webhook("solbusd", "1m")
 
     ema_s = 7
